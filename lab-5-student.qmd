@@ -12,6 +12,7 @@ embed-resources: true
 code-tools: true
 echo: true
 code-fold: true
+output: false
 ---
 
 For this lab, you will be joining and filtering related datasets to solve a murder mystery!
@@ -62,11 +63,117 @@ Detective Wickham reaches out to you...
 
 > A crime has taken place and I need your help! There was a murder in SQL City sometime on January 15, 2018. Could you retrieve the crime scene report from the police department’s database and follow the clues to find the person responsible for the murder?!
 
+Here we just filtering based on the details detective Wickham gives. 
 ```{r}
 #| label: inspecting-crime-scene-report
+#| output: TRUE
+
+#this here to get crime scenes with jan 15 2018
+date <- crime_scene_report |>
+  filter(date == 20180115) |>
+  filter(city == "SQL City") |>
+  filter(type == "murder")
+date$description
+```
+
+So then I looked at the description of the murder and found that there are 2 witnesses so I went to look up info about them.
+
+Finding the first witness
+```{r}
+#| output: TRUE
+wit1 <- person |>
+  filter(address_street_name == "Northwestern Dr") |>
+  filter(address_number == max(address_number))
+wit1
+```
+Finding the second witness
+```{r}
+#| output: TRUE
+wit2 <- person |>
+  filter(address_street_name == "Franklin Ave") |>
+  filter(str_detect(name, patter = "Annabel") == TRUE) 
+wit2
+```
+checking wit1 if get_fit_now_member
+```{r}
+get_fit_now_member |>
+  inner_join(wit1, by = c("person_id" = "id"))
 
 ```
 
+checking wit2 if get_fit_now_member
+```{r}
+wit2gym <- get_fit_now_member |>
+  inner_join(wit2 |> 
+               select(id), by = c("person_id" = "id"))
+wit2gym
+```
+The get fit now gym check was kinda useless looking back, but I thought there could be some info there so I ended up checking :(
+
+Seeing if get_fit_now_check_in has any info for wit2
+```{r}
+get_fit_now_check_in |>
+  inner_join(wit2gym, by = c("membership_id" = "id"))
+
+```
+above was also kinda useless looking back
+
+finding if wit1 did a facebook event
+```{r}
+#| output: TRUE
+facebook_event_checkin |>
+  inner_join(wit1, by = c("person_id" = "id"))
+
+```
+finding if wit2 did a facebook event
+```{r}
+#| output: TRUE
+facebook_event_checkin |>
+  inner_join(wit2, by = c("person_id" = "id"))
+
+```
+They did the same event on the day of the murder which makes me think I should look at other people who went to this event
+
+Checking who went to The Funky Grooves Tour
+```{r}
+#| output: TRUE
+facebook_event_checkin |>
+  filter(event_name == "The Funky Grooves Tour") |>
+  filter(event_id == 4719)
+```
+
+There was one other person that went to this event, so he seems kind of suspicious. Looking at the interview of suspects is my next idea.
+```{r}
+#| output: TRUE
+suspectsofar <- person |>
+  filter(id == 14887) |>
+  inner_join(interview, by = c("id" = "person_id"))
+suspectsofar$transcript
+```
+
+So this original suspect is probably not the murderer, but in the interview, we get some good information. Next steps will be checking this information, starting with the gym stuff.
+
+Find suspect based on his membership status gold thingy and if the substring 48Z in his id
+```{r}
+#| output: TRUE
+suspect_gym <- get_fit_now_member |>
+  filter(membership_status == "gold") |>
+  filter(str_locate(id, pattern = "48Z")[,1] == 1)
+suspect_gym
+```
+
+Now look for the licence plate H42W subset, join with the person tables based on licence_id, then join that with the information we got from looking at the gym data (gold card, string subset). Joined based on names, but also could join based on id.
+
+```{r}
+#| output: TRUE
+crime_committer <- drivers_license |>
+  filter(str_detect(plate_number, pattern = "H42W") == TRUE) |>
+  inner_join(person, by = c("id" = "license_id")) |>
+  inner_join(suspect_gym, by = "name") |>
+  select(person_id, name)
+
+crime_committer
+```
 
 **Follow the evidence to the person responsible for the murder, building a report as you go.**
 Hint: Make sure you check for interviews with any suspects!
@@ -74,4 +181,4 @@ Hint: Make sure you check for interviews with any suspects!
 
 ## And the final suspect is...
 
-*Put the name of the person responsible for the murder here:*
+*Jeremy Bowers*
